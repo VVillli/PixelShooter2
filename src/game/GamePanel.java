@@ -10,6 +10,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 
 import javax.swing.JPanel;
 import javax.swing.event.MouseInputListener;
@@ -30,6 +31,18 @@ public class GamePanel extends JPanel implements Runnable,KeyListener,MouseInput
 	
 	private int FPS = 60;
 	private int averageFPS;
+	
+	private Player player;
+	private CrossHair c;
+	
+	public static ArrayList<Bullet> bullets; 
+	public static ArrayList<Enemy> enemies;
+	
+	private long waveStartTimer;
+	private long waveStartTimerDiff;
+	private int waveNumber;
+	private boolean waveStart;
+	private int waveDelay = 2000;
 	
 	//Constructor
 	
@@ -65,6 +78,16 @@ public class GamePanel extends JPanel implements Runnable,KeyListener,MouseInput
 		g = (Graphics2D)image.getGraphics();
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+		
+		player = new Player();
+		c = new CrossHair((int)(player.getX()),(int)(player.getY()));
+		bullets = new ArrayList<Bullet>();
+		enemies = new ArrayList<Enemy>();
+		
+		waveStartTimer = 0;
+		waveStartTimerDiff = 0;
+		waveStart = true;
+		waveNumber = 0;
 		
 		long startTime;
 		long URDTimeMilli;
@@ -105,7 +128,37 @@ public class GamePanel extends JPanel implements Runnable,KeyListener,MouseInput
 	}
 	
 	public void gameUpdate(){
+		if(waveStartTimer == 0 && enemies.size() == 0){
+			waveNumber++;
+			waveStart = false;
+			waveStartTimer = System.nanoTime();
+		}
+		else{
+			waveStartTimerDiff = (System.nanoTime() - waveStartTimer)/1000000;
+			if(waveStartTimerDiff > waveDelay){
+				waveStart = true;
+				waveStartTimer = 0;
+				waveStartTimerDiff = 0;
+			}
+		}
 		
+		if(waveStart && enemies.size() == 0){
+			createNewEnemies();
+		}
+		
+		player.update();
+		
+		for(int i = 0; i < bullets.size(); i++){
+			boolean remove = bullets.get(i).update();
+			if(remove){
+				bullets.remove(i);
+				i--;
+			}
+		}
+		
+		for(int i = 0; i < enemies.size(); i++){
+			enemies.get(i).update();
+		}
 	}
 	
 	public void gameRender(){		
@@ -114,9 +167,31 @@ public class GamePanel extends JPanel implements Runnable,KeyListener,MouseInput
 		g.setColor(new Color(40,40,40,255));
 		g.fillRect(0, 0, width, height);
 		
-		g.setColor(Color.WHITE);
-		g.setFont(new Font("Century Gothic", Font.PLAIN, 12));
-		g.drawString("FPS: " + averageFPS, 10, 60);
+		//Draw Objects
+		
+		for(int i = 0; i < bullets.size(); i++){
+			bullets.get(i).draw(g);
+		}
+		
+		for(int i = 0; i < enemies.size(); i++){
+			enemies.get(i).draw(g);;
+		}
+		
+		player.draw(g);
+		c.draw(g);
+		
+		//Render HUD
+		
+		if(waveStartTimer != 0){
+			g.setFont(new Font("Century Gothic", Font.BOLD, 24));
+			String s = "- W A V E  " + waveNumber + "  -";
+			int length = (int)g.getFontMetrics().getStringBounds(s, g).getWidth();
+			int alpha = (int)(255*Math.sin(3.14*waveStartTimerDiff/waveDelay));
+			if(alpha > 255){alpha = 255;}
+			g.setColor(new Color(255,255,255, alpha));
+			g.drawString(s, width/2 - length/2, height/2);
+		}
+		
 	}
 	
 	public void gameDraw(){
@@ -125,29 +200,40 @@ public class GamePanel extends JPanel implements Runnable,KeyListener,MouseInput
 		g2.dispose();
 	}
 	
+	public void createNewEnemies(){
+		if(waveNumber < 3){
+			for(int i = 0; i < 4*waveNumber; i++){
+				enemies.add(new FollowEnemy((long)(Math.random()*2000*waveNumber), player));
+			}
+		}
+	}
+	
 	//Listeners
 	
 	public void keyTyped(KeyEvent key){}
 	public void keyPressed(KeyEvent key){
 		int keyCode = key.getKeyCode();
-		if(keyCode == KeyEvent.VK_A){}
-		if(keyCode == KeyEvent.VK_D){}
-		if(keyCode == KeyEvent.VK_W){}
-		if(keyCode == KeyEvent.VK_S){}
+		if(keyCode == KeyEvent.VK_A){player.setLeft(true);}
+		if(keyCode == KeyEvent.VK_D){player.setRight(true);}
+		if(keyCode == KeyEvent.VK_W){player.setUp(true);}
+		if(keyCode == KeyEvent.VK_S){player.setDown(true);}
 	}
 	public void keyReleased(KeyEvent key){
 		int keyCode = key.getKeyCode();
-		if(keyCode == KeyEvent.VK_A){}
-		if(keyCode == KeyEvent.VK_D){}
-		if(keyCode == KeyEvent.VK_W){}
-		if(keyCode == KeyEvent.VK_S){}
+		if(keyCode == KeyEvent.VK_A){player.setLeft(false);}
+		if(keyCode == KeyEvent.VK_D){player.setRight(false);}
+		if(keyCode == KeyEvent.VK_W){player.setUp(false);}
+		if(keyCode == KeyEvent.VK_S){player.setDown(false);}
 	}
 
 	public void mouseClicked(MouseEvent e) {}
-	public void mousePressed(MouseEvent e) {}
-	public void mouseReleased(MouseEvent e) {}
+	public void mousePressed(MouseEvent e) {player.setFiring(true, e.getX(), e.getY());}
+	public void mouseReleased(MouseEvent e) {player.setFiring(false, e.getX(), e.getY());}
 	public void mouseEntered(MouseEvent e) {}
 	public void mouseExited(MouseEvent e) {}
-	public void mouseDragged(MouseEvent e) {}
-	public void mouseMoved(MouseEvent e) {}
+	public void mouseDragged(MouseEvent e) {
+		player.setFiring(true, e.getX(), e.getY());
+		c.update(e.getX(), e.getY());
+	}
+	public void mouseMoved(MouseEvent e) {c.update(e.getX(), e.getY());}
 }
